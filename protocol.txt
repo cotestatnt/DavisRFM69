@@ -1,0 +1,209 @@
+This is the protocol used by the Davis Weather wiressless Integrated Sensor
+Suite (ISS) to communicate its readings back to the console.
+
+Packets are sent from the ISS every 2.5 seconds for an ISS set to a transmit
+ID of zero.  The rate gets slower as the transmit ID increases by 1/16 of a
+second for every station ID number e.g. ID 1 transmits at an interval of
+2.5625 seconds (ref: Davis Serial Protocol document).  The data rate is 19.2
+kbps and is transmitted from the ISS with least significant bit first.  More
+here:
+
+http://madscientistlabs.blogspot.ca/2012/03/first-you-get-sugar.html
+
+The starting point for reverse engineering the protocol is the output from the
+STRMON command when connected to the console with an LVTTL serial connection.
+This connection is discussed in detail in:
+
+http://madscientistlabs.blogspot.ca/2011/01/davis-weatherlink-software-not-required.html
+
+Let's use the following STRMON snippet as an example.
+
+0 = 60
+1 = 6
+2 = d3
+3 = ff
+4 = c0
+5 = 0
+6 = 78
+7 = 75
+
+The eight bytes come from the ISS in this order.  However, each byte comes in
+from the ISS with least significant bit first.  The bit order has to be
+flipped before we can work with it.  All values in the example above are in
+hex. 
+
+Byte 0: This is a header.  The upper nibble is the sensor the data is from, as
+follows.
+
+  4 = UV Index
+  5 = ?
+  6 = solar radiation
+  8 = temperature
+  9 = ?
+  a = humidity
+  e = rain
+
+The lowest three bits in the low order nibble is the transmitter ID, set via dipswitches
+inside the unit.
+
+Ref: http://www.wxforum.net/index.php?topic=10531.msg101520#msg101520
+
+Bit 3 in the low order nibble of byte 0 indicates if the transmitter battery
+is low. The bit is set to zero if the battery is OK, but is apparently only
+set if the transmitter needs to run off the battery and not the solar-charged
+supercap.
+
+Reference: http://www.wxforum.net/index.php?topic=15273.msg149673#msg149673
+
+Byte 1: Wind speed in mph.  Wind speed is updated every transmission.  Simple.
+
+Byte 2: Wind direction from 1 to 360 degrees.  Wind direction is updated every
+transmission.  The wind reading is contained in a single byte that limits the
+maximum value to 255.  It is converted to a range of 1 to 360 degrees by
+scaling the byte value by 360 / 255.  A wind speed reading of 0xd3 = 211
+(decimal) * 360 / 255 = 297.  
+
+Davis says that 0 indicates it can't get a reading, so you'd never see wind
+straight out of the North unless your wind vane is broken.
+
+Reference: http://www.wxforum.net/index.php?topic=10531.msg101523#msg101523
+
+Byte 6: High byte of the 16 bit CRC (0x78 in our example above)
+Byte 7: Low byte of the 16 bit CRC (0x75 in our example above)
+
+The CRC is the same as that on the serial interface and is documented in the
+Davis "VantageSerialProtocolDocs_v230.pdf" document.  The first six bytes can
+be run through the calcuation and checked against the seventh and eight bytes.
+Alternatively, all eight bytes can be run through the calculation and the
+result will be zero if the CRC is valid.  Pocketwx uses the CRC algorithm from
+http://www.menie.org/georges/embedded
+
+Bytes 3 - 5: Depend on the sensor being read at the time.  Need to work
+through these.  This is what is known now.
+
+Message 4:
+
+Bytes 3 and 4 are for UV Index.  The first byte is MSB and the second LSB. 
+The lower nibble of the 4th byte is always 5, so they only use the first
+three nibbles.  A value of FF in the third byte indicates that no sensor is 
+present.
+
+The UV index is calcuated as follows.
+
+  UV Index = (byte3 << 8 + byte4) >> 6) / 50.0
+
+Reference: http://www.wxforum.net/index.php?topic=18489.msg178506#msg178506
+Reference: http://www.wxforum.net/index.php?topic=18489.msg190548#msg190548
+
+Message 6:
+
+Bytes 3 and 4 are solar radiation.  The first byte is MSB and the second LSB. 
+The lower nibble of the 4th byte is again always 5, so they only use the first
+three nibbles.  A value of FF in the third byte indicates that no sensor is 
+present.
+
+  Solar radiation = (byte3 << 8 + byte4) >> 6) * 1.757936
+
+Reference: http://www.wxforum.net/index.php?topic=18489.msg178506#msg178506
+Reference: http://www.wxforum.net/index.php?topic=18489.msg190548#msg190548
+
+Message 8:
+
+Byte 3 and 4 are temperature.  The first byte is MSB and the second LSB.  The
+value is signed with 0x0000 representing 0F.  This reading in the old version
+of the ISS was taked from an analog sensor and measured by an A/D.  The newer
+ISS uses a digital sensor but still represents the data in the same way.  160
+counts (0xa0) represents 1 degree F.  A message of
+
+80 04 70 0f 99 00 91 11
+
+represents temperature as 0x0f99, or 3993 decimal.  Divide 3993 by 160 to get
+the console reading of 25.0F
+
+Message a:
+
+Humidity is represented as two bytes in Byte 3 and Byte 4 as a ten bit value.
+Bits 5 and 4 in Byte 4 are the two most significant bits.  Byte 3 is the
+low order byte. The ten bit value is then 10x the humidity value displayed on
+the console.  The function of the four low order bits in Byte 3 that cause the
+apparent jitter are not known.  Here is an example.
+
+a0 06 52 83 38 00 5a c8
+
+((0x38 >> 4) << 8) + 0x83 = 131 + 768 = 899 = 89.9% Relative Humidity
+
+The displayed humidity at the time was 90%.  The console rounds the value.
+
+Reference: http://madscientistlabs.blogspot.ca/2012/05/its-not-heat.html
+
+Message e:
+
+Rain is in Byte 3.  It is a running total of bucket tips that wraps back
+around to 0 eventually from the ISS.  It is up to the console to keep track of
+changes in this byte.  The example below is bound to confuse: the leading
+value is the elapsed time since data collection started (in seconds), all
+bytes have been converted to decimal, and the last two CRC bytes have been
+stripped off.  A tip of the rain bucket causes the value the ISS is sending
+from a steady value of 40 to a new value of 41.
+
+2426.3,224,16,33,40,1,0
+2436.6,224,11,36,40,1,0
+2446.8,224,9,29,41,2,0
+2457.1,224,10,29,41,3,0
+
+
+To summarize:
+- Byte 0 is a header.
+- Byte 1 always represents wind speed
+- Byte 2 always represents the wind direction
+- Bytes 3-5 will carry other data according to the header in Byte 0
+- Bytes 6 and 7 always represents the checksum with high byte first
+
+-------------
+
+From my notes to help work the rest of this out:
+
+Signed values from the weather station console are two's complement, least
+significant byte first.  Note that pressure is measured by the console and not
+the ISS, so don't expect it to appear in the STRMON output.
+
+Update rates below are from Davis' specs and manuals.  Data sizes and signing
+are as per the loop command and are what one might expect out of STRMON but
+not always.  I noted above that wind direction via STRMON is actually one byte
+unsigned.  There may be other exceptions.
+- Outside temp: 10 seconds in 10th of a degree F, two bytes signed (message e
+  in STRMON, bytes 3 and 4).
+- Winds speed: 2.5 seconds, one byte unsigned  (Byte 1 in STRMON, always)
+- Wind direction: 2.5 seconds, two bytes unsigned from 1 to 360  (one byte
+  via STRMON, Byte 2 always)
+- Outside humidity: 50 seconds in percent, one byte unsigned (message a in
+  STRMON, bytes 3 and 4)
+- Rain: 10 seconds.  This is in counts of 0.01 inches.
+- Pressure: in Hg/1000, two bytes unsigned  (Rate????)
+- Leaf Wetness: 40 seconds
+- Soil Moisture: 40 seconds
+- Solar radiation: 50 seconds
+- UV: 50 seconds
+- Soil Moisture: 62.5 seconds
+
+I think all other outdoor related values are calculated in the console.
+
+The only headers (ie Byte 0) I see from my wireless VP2 with no additional
+sensors connected are:
+
+40 50 60 80 90 a0 e0
+
+The rates they show up at are:
+-40 shows either every 47.5 or 50 seconds
+-50 shows every 10 seconds
+-60 shows every 50 seconds
+-80 shows every 10 seconds
+-90 shows either 45, 47.5, or 50 seconds
+-a0 shows alternately every 40 seconds and 10 seconds (interesting!)
+-e0 shows every 10 seconds
+
+These rates along with the rates given in the Davis manual should make
+correlating the data a lot easier.
+
+Copyright DeKay @ madscientistlabs.blogspot.com under the Creative Commons
+Attribution-ShareAlike License 3.0
