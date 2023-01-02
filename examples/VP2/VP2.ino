@@ -6,20 +6,18 @@
 
 // NOTE: *** One of DAVIS_FREQS_US, DAVIS_FREQS_EU, DAVIS_FREQS_AU, or
 // DAVIS_FREQS_NZ MUST be defined at the top of DavisRFM69.h ***
-
 #define IS_RFM69HW 1    // uncomment only for RFM69HW! Leave out if you have RFM69W!
 
 #define PACKET_INTERVAL 2555
 #define LOOP_INTERVAL 2500
-
 
 /* ESP32 pinout */
 
 // MISO  GPIO_NUM_12
 // MOSI  GPIO_NUM_13
 // SCLK  GPIO_NUM_14
-#define RF69_NSS  GPIO_NUM_15
-#define RF69_IRQ  GPIO_NUM_2
+#define RF69_NSS  10  //GPIO_NUM_15
+#define RF69_IRQ  2    //GPIO_NUM_2
 
 DavisRFM69 radio(RF69_NSS, RF69_IRQ, IS_RFM69HW);
 
@@ -33,7 +31,8 @@ struct __attribute__((packed)) MyData
   uint8_t windSpeed;                // Wind speed in kilometer per hour
   uint16_t windDirection;           // Wind direction from 1 to 360 degrees (0 = no wind data)
 
-  // uint16_t dayRain;                 // Rain today sent as number of rain clicks (0.2mm or 0.01in)
+  uint16_t rainClick;               // Rain today sent as number of rain clicks (0.2mm or 0.01in)
+  double dayRain;
   // uint16_t monthRain;               // Rain this month sent as number of rain clicks (0.2mm or 0.01in)
   // uint16_t yearRain;                // Rain this year sent as number of rain clicks (0.2mm or 0.01in)
   uint8_t transmitterBatteryStatus; // Transmitter battery status (0 or 1)
@@ -53,7 +52,7 @@ void setup()
   radio.initialize();
   radio.setChannel(0);  // Frequency / Channel *not* set in initialization. Do it right after.
   radio.setHighPower(); // Uncomment only for RFM69HW!
-  Serial.println("Wind\nSpeed\tDir\tTemp.\tHum\tRain\nm/s\t360°\t°C\t%\tmm/h");
+  Serial.println("Wind\nSpeed\tDir\tTemp.\tHum\tRain\t Day\nm/s\t360°\t°C\t%\tmm/h\tmm");
 }
 
 // See https://github.com/dekay/im-me/blob/master/pocketwx/src/protocol.txt
@@ -114,9 +113,10 @@ void printData() {
     printTime = millis();
     char dataBuf[512];
     snprintf(dataBuf, sizeof(dataBuf),
-      "%d\t%d\t%d.%d\t%d.%d\t%d.%d",
+      "%d\t%d\t%d.%d\t%d.%d\t%d.%d\t%d.%d",
       myData.windSpeed, myData.windDirection, (int)myData.temperature, (int)(abs(myData.temperature)*10)%10,
-      (int)myData.humidity, (int)(myData.humidity*10)%10, (int)myData.rainRate, (int)(myData.rainRate*10)%10
+      (int)myData.humidity, (int)(myData.humidity*10)%10, (int)myData.rainRate, (int)(myData.rainRate*10)%10,
+      (int)myData.dayRain, (int)(myData.dayRain*10)%10
     );
     Serial.println(dataBuf);
   }
@@ -149,7 +149,7 @@ void processPacket()
   {
     case VP2P_TEMP: {
       // printDataPacketValue(radio.DATA);
-      double tempF =  (double)word(radio.DATA[3], radio.DATA[4]) / 160.0 ;
+      double tempF = (double)word(radio.DATA[3], radio.DATA[4]) / 160.0 ;
 
       // Fahrenheit to Celsius
       myData.temperature = (tempF - 32.0) / 1.8;
@@ -171,8 +171,19 @@ void processPacket()
       break;
     }
     case VP2P_RAIN: {
-      // Serial.print("Rain bucket tips counter: ");
-      // Serial.println(radio.DATA[3] && 0x7F);
+      printDataPacketValue(radio.DATA);
+
+      static uint16_t overflow = 0;
+      if (radio.DATA[3] == 0x00 && !overflow) {
+        overflow++;
+        myData.rainClick = overflow*127 + 1;
+      }
+      else
+        myData.rainClick = radio.DATA[3] + overflow*127;
+      myData.dayRain = myData.rainClick*0.2;
+
+      Serial.print("Rain bucket clicks: ");
+      Serial.println(myData.rainClick);
       break;
     }
 
