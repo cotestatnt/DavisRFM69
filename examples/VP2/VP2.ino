@@ -18,14 +18,15 @@ struct __attribute__((packed)) MyData
 {
   double rainRate;                  // Rain rate as number of rain clicks per hour (e.g 256 = 2.56 in/hr)
   double temperature;               // Outside temperature in tenths of degrees
+  double humidity;                  // Outside relative humidity in %
+  double uV;                        // UV index
+  double solarRadiation;             // Solar radiation in Watts/m^2
   uint8_t windSpeed;                // Wind speed in kilometer per hour
   uint16_t windDirection;           // Wind direction from 1 to 360 degrees (0 = no wind data)
-  uint8_t humidity;                 // Outside relative humidity in %.
-  uint8_t uV;                       // UV index
-  uint16_t solarRadiation;          // Solar radiation in Watts/m^2
-  uint16_t dayRain;                 // Rain today sent as number of rain clicks (0.2mm or 0.01in)
-  uint16_t monthRain;               // Rain this month sent as number of rain clicks (0.2mm or 0.01in)
-  uint16_t yearRain;                // Rain this year sent as number of rain clicks (0.2mm or 0.01in)
+
+  // uint16_t dayRain;                 // Rain today sent as number of rain clicks (0.2mm or 0.01in)
+  // uint16_t monthRain;               // Rain this month sent as number of rain clicks (0.2mm or 0.01in)
+  // uint16_t yearRain;                // Rain this year sent as number of rain clicks (0.2mm or 0.01in)
   uint8_t transmitterBatteryStatus; // Transmitter battery status (0 or 1)
 };
 
@@ -78,10 +79,8 @@ void loop()
     radio.hop();
   }
 
-  // If a packet was not received at the expected time, hop the radio anyway
-  // in an attempt to keep up.  Give up after 25 failed attempts.  Keep track
-  // of packet stats as we go.  I consider a consecutive string of missed
-  // packets to be a single resync.  Thx to Kobuki for this algorithm.
+  // If a packet was not received at the expected time, hop the radio anyway in an attempt to keep up.
+  // Give up after 25 failed attempts. Keep track of packet stats as we go.
   if ((hopCount > 0) && ((millis() - lastRxTime) > (hopCount * PACKET_INTERVAL + 200)))
   {
     stats.packetsMissed++;
@@ -106,9 +105,9 @@ void printData() {
     printTime = millis();
     char dataBuf[512];
     snprintf(dataBuf, sizeof(dataBuf),
-      "%d\t%d\t%d.%d\t%d\t%d.%d",
-      myData.windSpeed, myData.windDirection, (int)myData.temperature, (int)(myData.temperature*10)%10,
-      myData.humidity, (int)myData.rainRate, (int)(myData.rainRate*10)%10
+      "%d\t%d\t%d.%d\t%d.%d\t%d.%d",
+      myData.windSpeed, myData.windDirection, (int)myData.temperature, (int)(abs(myData.temperature)*10)%10,
+      (int)myData.humidity, (int)(myData.humidity*10)%10, (int)myData.rainRate, (int)(myData.rainRate*10)%10
     );
     Serial.println(dataBuf);
   }
@@ -128,15 +127,11 @@ void printDataPacketValue(volatile uint8_t * data) {
 // Read the data from the ISS and figure out what to do with it
 void processPacket()
 {
-  // 1 for battery low
-  myData.transmitterBatteryStatus = (radio.DATA[0] & 0x8) >> 3;
-
   // Every packet has wind speed, direction, and battery status in it
   myData.windSpeed = radio.DATA[1];
-
-  // There is a dead zone on the wind vane. No values are reported between 8 and 352 degrees inclusive.
-  // These values correspond to received byte values of 1 and 255 respectively
-  myData.windDirection = 9 + radio.DATA[2] * 342.0f / 255.0f;
+  myData.windDirection = radio.DATA[2] * 360 / 255;
+  // 1 for battery low
+  myData.transmitterBatteryStatus = (radio.DATA[0] & 0x8) >> 3;
 
   // Now look at each individual packet. The high order nibble is the packet type.
   // The highest order bit of the low nibble is set high when the ISS battery is low.
@@ -144,21 +139,24 @@ void processPacket()
   switch (radio.DATA[0] >> 4)
   {
     case VP2P_TEMP: {
-      uint16_t temp =  (int16_t)word(radio.DATA[3], radio.DATA[4]) >> 4;
-      myData.temperature = ((temp/10) - 32.0) / 1.8;
+      // printDataPacketValue(radio.DATA);
+      double tempF =  (double)word(radio.DATA[3], radio.DATA[4]) / 160.0 ;
+
+      // Fahrenheit to Celsius
+      myData.temperature = (tempF - 32.0) / 1.8;
       break;
     }
     case VP2P_HUMIDITY:
-      myData.humidity = word(radio.DATA[4] >> 4, radio.DATA[3]) / 10.0;
+      // printDataPacketValue(radio.DATA);
+      myData.humidity = (double)word(radio.DATA[4] >> 4, radio.DATA[3]) / 10.0;
       break;
     case VP2P_UV:
-      myData.uV = (uint8_t)((word(radio.DATA[3], radio.DATA[4]) >> 4) - 4) / (2.27 - 0.2488);
+      myData.uV = (word(radio.DATA[3], radio.DATA[4]) >> 6) / 50.0 ;
       break;
     case VP2P_SOLAR:
-      myData.solarRadiation = (uint16_t)(radio.DATA[3] * 4) + ((radio.DATA[3] && 0xC0) / 64 );
+      myData.solarRadiation = (word(radio.DATA[3], radio.DATA[4]) >> 6) * 1.757936;
       break;
     case VP2P_RAINSECS: {
-      // printDataPacketValue(radio.DATA);
       RainData rain = getRainState(radio.DATA);
       myData.rainRate = rain.rate;
       break;
@@ -177,8 +175,9 @@ void processPacket()
 
 RainData getRainState(volatile uint8_t* data) {
   RainData _rain;
-  if (data[3] == 0xFF && data[4] == 0x00) {
+  if (data[3] == 0xFF && data[4] >= 0x75) {
     _rain.state = "No rain";
+    _rain.rate = 0.0;
     return _rain;
   }
   uint8_t factor = data[4] >> 4;
