@@ -7,12 +7,21 @@
 // NOTE: *** One of DAVIS_FREQS_US, DAVIS_FREQS_EU, DAVIS_FREQS_AU, or
 // DAVIS_FREQS_NZ MUST be defined at the top of DavisRFM69.h ***
 
-#define IS_RFM69HW         // uncomment only for RFM69HW! Leave out if you have RFM69W!
+#define IS_RFM69HW 1    // uncomment only for RFM69HW! Leave out if you have RFM69W!
 
 #define PACKET_INTERVAL 2555
 #define LOOP_INTERVAL 2500
 
-DavisRFM69 radio;
+
+/* ESP32 pinout */
+
+// MISO  GPIO_NUM_12
+// MOSI  GPIO_NUM_13
+// SCLK  GPIO_NUM_14
+#define RF69_NSS  GPIO_NUM_15
+#define RF69_IRQ  GPIO_NUM_2
+
+DavisRFM69 radio(RF69_NSS, RF69_IRQ, IS_RFM69HW);
 
 struct __attribute__((packed)) MyData
 {
