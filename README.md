@@ -3,7 +3,8 @@ DavisRFM69 Library
 
 This library is a modified version of the [DeKay's DavisRFM69 library](https://github.com/dekay/DavisRFM69) that enables reception of weather data from a Davis Instruments Integrated Sensor Suite (ISS) weather station.
 
-##Background
+## Background
+
 The Davis Instruments ISS is a solar powered and battery-backed set of outdoor weather sensors monitored by a PIC microcontroller.  It uses a TI CC1020 RF Transmitter chip to send the weather data it collects back to a Davis Vantage VP2 or Vantage Vue console located indoors.  The ISS transmissions have been reverse engineered, and this has allowed receivers based on the TI CC1110 chip (amongst others) to receive its transmissions.
 
 The drawback of the CC1110 is that it has its own embedded microcontroller [that requires separate hardware to program](http://madscientistlabs.blogspot.ca/2012/01/troubles-with-im-me-and-goodfet.html).  The simpler CC1101 does not have this controller and can be commanded over a SPI bus, but it is difficult to find this board in a 915 MHz flavor as used by Davis ISS units in North America.  Beware EBay units saying they are 915 MHz: they likely actually operate at 433 MHz and are of no use.  [Ask me how I know...](http://madscientistlabs.blogspot.ca/2013/04/dead-end.html)
