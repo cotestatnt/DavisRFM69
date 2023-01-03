@@ -1,27 +1,39 @@
-// Sample usage of the DavisRFM69 library to sniff the packets from a Davis Instruments
-// wireless Integrated Sensor Suite (ISS)
+/*
+* Sample usage of the DavisRFM69 library to sniff the packets from a Davis Instruments
+* wireless Integrated Sensor Suite (ISS)
+*/
 
+// Time zone, daylight time intervals
+#define MYTZ "CET-1CEST-2,M3.5.0,M10.5.0/3"
+
+
+#include <WiFi.h>
 #include <DavisRFM69.h> // From https://github.com/dekay/DavisRFM69
 #include <SPI.h>        // From standard Arduino library
 
+
 // NOTE: *** One of DAVIS_FREQS_US, DAVIS_FREQS_EU, DAVIS_FREQS_AU, or
 // DAVIS_FREQS_NZ MUST be defined at the top of DavisRFM69.h ***
-
 #define IS_RFM69HW 1    // uncomment only for RFM69HW! Leave out if you have RFM69W!
 
 #define PACKET_INTERVAL 2555
 #define LOOP_INTERVAL 2500
 
-
 /* ESP32 pinout */
-
 // MISO  GPIO_NUM_12
 // MOSI  GPIO_NUM_13
 // SCLK  GPIO_NUM_14
-#define RF69_NSS  GPIO_NUM_15
-#define RF69_IRQ  GPIO_NUM_2
+#define RF69_NSS  15  //GPIO_NUM_15
+#define RF69_IRQ  2    //GPIO_NUM_2
 
-DavisRFM69 radio(RF69_NSS, RF69_IRQ, IS_RFM69HW);
+SPIClass* hspi = new SPIClass(HSPI);
+
+DavisRFM69 radio(hspi, RF69_NSS, RF69_IRQ, IS_RFM69HW);
+
+struct __attribute__((packed)) RainData {
+  String state = "No rain";
+  double rate = 0.0;
+};
 
 struct __attribute__((packed)) MyData
 {
@@ -33,7 +45,8 @@ struct __attribute__((packed)) MyData
   uint8_t windSpeed;                // Wind speed in kilometer per hour
   uint16_t windDirection;           // Wind direction from 1 to 360 degrees (0 = no wind data)
 
-  // uint16_t dayRain;                 // Rain today sent as number of rain clicks (0.2mm or 0.01in)
+  uint16_t rainClick;               // Rain today sent as number of rain clicks (0.2mm or 0.01in)
+  double dayRain;
   // uint16_t monthRain;               // Rain this month sent as number of rain clicks (0.2mm or 0.01in)
   // uint16_t yearRain;                // Rain this year sent as number of rain clicks (0.2mm or 0.01in)
   uint8_t transmitterBatteryStatus; // Transmitter battery status (0 or 1)
@@ -42,30 +55,26 @@ struct __attribute__((packed)) MyData
 MyData myData;
 PacketStats stats = {0, 0, 0, 0 ,0};
 
-struct RainData {
-  String state = "No rain";
-  double rate = 0.0;
-};
 
-void setup()
-{
-  Serial.begin(115200);
-  radio.initialize();
-  radio.setChannel(0);  // Frequency / Channel *not* set in initialization. Do it right after.
-  radio.setHighPower(); // Uncomment only for RFM69HW!
-  Serial.println("Wind\nSpeed\tDir\tTemp.\tHum\tRain\nm/s\t360°\t°C\t%\tmm/h");
+// Structure containing a calendar date and time broken down into its components.
+// https://cplusplus.com/reference/ctime/tm/
+// It's defined inside "time.h", automatically inclued in sketch
+struct tm tInfo;
+
+// Get update time (with timeout)
+void updatetime(const uint32_t timeout) {
+  uint32_t start = millis();
+  do {
+    time_t now = time(nullptr);
+    tInfo = *localtime(&now);
+    delay(1);
+  } while (millis() - start < timeout  && tInfo.tm_year <= (1970 - 1900));
 }
 
-// See https://github.com/dekay/im-me/blob/master/pocketwx/src/protocol.txt
-uint32_t lastRxTime = 0;
-uint8_t hopCount = 0;
 
-void loop()
-{
-  // Print updated data to Serial every 3 seconds
-  printData();
-
-
+void getRadioData(){
+  static uint32_t lastRxTime = 0;
+  static uint8_t hopCount = 0;
   // The check for a zero CRC value indicates a bigger problem that will need fixing, but it needs to stay until the fix is in.
   if (radio.receiveDone())
   {
@@ -101,22 +110,16 @@ void loop()
   }
 }
 
-
 void printData() {
-    // Serial.print("UV Index: ");
-    // radio.DATA[3] == 0xFF ? Serial.println(" no sensor.") : Serial.println(myData.uV);
-
-        // Serial.print("Solar irradiation: ");
-    // radio.DATA[3] == 0xFF ? Serial.println(" no sensor.") : Serial.println(myData.solarRadiation);
-
   static uint32_t printTime;
   if (millis() - printTime > 3000) {
     printTime = millis();
     char dataBuf[512];
     snprintf(dataBuf, sizeof(dataBuf),
-      "%d\t%d\t%d.%d\t%d.%d\t%d.%d",
+      "%d\t%d\t%d.%d\t%d.%d\t%d.%d\t%d.%d",
       myData.windSpeed, myData.windDirection, (int)myData.temperature, (int)(abs(myData.temperature)*10)%10,
-      (int)myData.humidity, (int)(myData.humidity*10)%10, (int)myData.rainRate, (int)(myData.rainRate*10)%10
+      (int)myData.humidity, (int)(myData.humidity*10)%10, (int)myData.rainRate, (int)(myData.rainRate*10)%10,
+      (int)myData.dayRain, (int)(myData.dayRain*10)%10
     );
     Serial.println(dataBuf);
   }
@@ -134,6 +137,7 @@ void printDataPacketValue(volatile uint8_t * data) {
 }
 
 // Read the data from the ISS and figure out what to do with it
+// See https://github.com/dekay/im-me/blob/master/pocketwx/src/protocol.txt
 void processPacket()
 {
   // Every packet has wind speed, direction, and battery status in it
@@ -149,7 +153,7 @@ void processPacket()
   {
     case VP2P_TEMP: {
       // printDataPacketValue(radio.DATA);
-      double tempF =  (double)word(radio.DATA[3], radio.DATA[4]) / 160.0 ;
+      double tempF = (double)word(radio.DATA[3], radio.DATA[4]) / 160.0 ;
 
       // Fahrenheit to Celsius
       myData.temperature = (tempF - 32.0) / 1.8;
@@ -171,8 +175,24 @@ void processPacket()
       break;
     }
     case VP2P_RAIN: {
-      // Serial.print("Rain bucket tips counter: ");
-      // Serial.println(radio.DATA[3] && 0x7F);
+      // printDataPacketValue(radio.DATA);
+      updatetime(100);
+      // Check for a new day
+      if (tInfo.tm_hour == 0 && tInfo.tm_min == 0 && (tInfo.tm_sec >= 0 && tInfo.tm_sec <= 10))
+        if (myData.rainClick)
+          myData.rainClick = 0;
+
+      static uint16_t overflow = 0;
+      if (radio.DATA[3] == 0x00 && !overflow) {
+        overflow++;
+        myData.rainClick = overflow*127 + 1;
+      }
+      else
+        myData.rainClick = radio.DATA[3] + overflow*127;
+      myData.dayRain = myData.rainClick*0.2;
+
+      // Serial.print("Rain bucket clicks: ");
+      // Serial.println(myData.rainClick);
       break;
     }
 
@@ -202,3 +222,42 @@ RainData getRainState(volatile uint8_t* data) {
   _rain.rate =  11520 / raw;
   return _rain;
 }
+
+
+
+
+
+void setup()
+{
+  Serial.begin(115200);
+  Serial.print("Connecting to WiFi");
+  WiFi.begin("Wokwi-GUEST", "", 6);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(100);
+    Serial.print(".");
+  }
+  Serial.println(" Connected!");
+
+  // Config timezone and NTP servers
+  configTzTime(MYTZ, "time.google.com", "time.windows.com", "pool.ntp.org");
+
+  // At start-up it is necessary to wait a few seconds for synchronization
+  updatetime(5000);
+
+  radio.initialize();
+  radio.setChannel(0);  // Frequency / Channel *not* set in initialization. Do it right after.
+  radio.setHighPower(); // Uncomment only for RFM69HW!
+  Serial.println("Wind\nSpeed\tDir\tTemp.\tHum\tRain\t Day\nm/s\t360°\t°C\t%\tmm/h\tmm");
+}
+
+
+void loop()
+{
+  // Print updated data to Serial every 3 seconds
+  printData();
+
+  // Get data from radio module and fill the buffer
+  getRadioData();
+}
+
+
