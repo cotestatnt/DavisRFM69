@@ -1,9 +1,5 @@
 DavisRFM69 Library
 -------------------
-By DeKay (dekaymail@gmail.com)
-<br>
-Creative Commons Attribribution Share-Alike License
-http://creativecommons.org/licenses/by-sa/3.0/
 
 This library is a modified version of the [DeKay's DavisRFM69 library](https://github.com/dekay/DavisRFM69) that enables reception of weather data from a Davis Instruments Integrated Sensor Suite (ISS) weather station.
 
