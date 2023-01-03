@@ -5,7 +5,7 @@ By DeKay (dekaymail@gmail.com)
 Creative Commons Attribribution Share-Alike License
 http://creativecommons.org/licenses/by-sa/3.0/
 
-This library is a modified version of the [LowPowerLab's RFM69 library](https://github.com/LowPowerLab/RFM69) that enables reception of weather data from a Davis Instruments Integrated Sensor Suite (ISS) weather station.
+This library is a modified version of the [DeKay's DavisRFM69 library](https://github.com/dekay/DavisRFM69) that enables reception of weather data from a Davis Instruments Integrated Sensor Suite (ISS) weather station.
 
 ##Background
 The Davis Instruments ISS is a solar powered and battery-backed set of outdoor weather sensors monitored by a PIC microcontroller.  It uses a TI CC1020 RF Transmitter chip to send the weather data it collects back to a Davis Vantage VP2 or Vantage Vue console located indoors.  The ISS transmissions have been reverse engineered, and this has allowed receivers based on the TI CC1110 chip (amongst others) to receive its transmissions.
@@ -16,34 +16,20 @@ The one potential bright spot in the CC11xx story is the [RFBee](http://www.seee
 
 The new kid on the block is the RFM69 module from HopeRF.  This module is inexpensive and can be bought either standalone or integrated on a ["Moteino"](http://lowpowerlab.com/blog/category/moteino/) Atmega 328 Arduino clone from LowPowerLabs.  This library demonstrates that the RFM69 is flexible enough to receive transmissions from the TI transmitter chip in the ISS.
 
-**Note**: the previous generation HopeRF RFM12B module popularized by the [JeeNode](http://jeelabs.net/projects/cafe/wiki/Dive_Into_JeeNodeshttp://jeelabs.net/projects/cafe/wiki/Dive_Into_JeeNodes)...
-- has hardcoded preamble bytes that prevent its use in this application
-- has a very small FIFO that makes you [jump through hoops](https://github.com/gkaindl/rfm12b-linux) if you don't have something real-time to respond to incoming data
-- [is no longer recommended for new designs](http://jeelabs.org/2013/06/28/status-of-the-rfm12b/)
-
 ## Features
-This library sniffs the wireless packets transmitted from a Davis ISS.  Other features are on the drawing board.  After all, why just receive?
-
-This library is in its early stages but I wanted to get something functional out there.  Churn should be expected for the next little while.
-
+This library sniffs the wireless packets transmitted from a Davis ISS.  
 This library has been developed on a Moteino R3 [(see here for the new R4 version)](http://lowpowerlab.com/shop/Moteino-R4)
-fitted with an RFM69W (Semtech SX1231/SX1231) transceiver module.
-
-##Installation
-[See this blog post](http://madscientistlabs.blogspot.ca/2014/02/build-your-own-davis-weather-station_17.html) where I combines ISS Reception capabilities along with hookups to sensors for indoor monitoring of temperature, pressure, and humidity.  Note that this code no longer requires the installation of [LowPowerLab's RFM69 library](https://github.com/LowPowerLab/RFM69) discussed in that post, but you will still need to install his [SPIFlash library](https://github.com/LowPowerLab/SPIFlash).  Since that post was written, I have also added support for the DS3231 Real Time Clock chip.  To get this to work from a software perspective, you will need [this RTC library](https://github.com/mizraith/RTClib) in your Arduino "libraries" folder.
+fitted with an RFM69W (Semtech SX1231/SX1231) transceiver module, but works also with standalone mradio module and any otrher microcontroller on SPI bus.
 
 ##Miscellaneous / Possible Issues
 
 Reception quality has been greatly improved in this release.  ~~There looks to be a bug where the hop-ahead code has broken, but I expect that will be fixed soon~~ I am getting around 99% good packets now.  Please let me know if you find any issues.
 
 ##Sample Usage
-[VP2](https://github.com/dekay/DavisRFM69/blob/master/Examples/VP2/VP2.ino) is an emulation of the Davis Vantage Pro2 console that works with Sandaysoft's Cumulus weather software.  As noted above, you will need [this RTC library](https://github.com/mizraith/RTClib) in your Arduino "libraries" folder.
+[VP2.ino](https://github.com/cotestatnt/DavisRFM69/blob/master/examples/VP2/VP2.ino) is an emulation of a "custom" console
 
-The ISSRx Example hasn't been updated in a while and may be broken.  Just so you know...
 
 ##Blog Writeups
-[ISS Reception](http://madscientistlabs.blogspot.ca/2014/01/more-than-one-way-to-skin-cat.html), along with the best GIF ever.
-
 [Davis Console Emulation](http://madscientistlabs.blogspot.ca/2014/02/build-your-own-davis-weather-station_17.html) combines ISS Reception capabilities along with hookups to sensors for indoor monitoring of temperature, pressure, and humidity.
 
 ##Why
