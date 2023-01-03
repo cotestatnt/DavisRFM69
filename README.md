@@ -18,7 +18,7 @@ This module is inexpensive and can be bought either standalone or integrated on 
 ## Features
 This library sniffs the wireless packets transmitted from a Davis ISS.  
 This library has been developed on a Moteino R3 [(see here for the new R4 version)](http://lowpowerlab.com/shop/Moteino-R4)
-fitted with an RFM69W (Semtech SX1231/SX1231) transceiver module, but works also with standalone mradio module and any otrher microcontroller on SPI bus.
+fitted with an RFM69W (Semtech SX1231/SX1231) transceiver module, but works also with standalone radio module and any other microcontroller on SPI bus.
 
 ##Miscellaneous / Possible Issues
 
