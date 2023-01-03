@@ -199,7 +199,7 @@ bool DavisRFM69::initialize()
 
   digitalWrite(_slaveSelectPin, HIGH);
   pinMode(_slaveSelectPin, OUTPUT);
-  SPI.begin();
+  _spi->begin();
 
 #ifdef SPI_HAS_TRANSACTION
   _settings = SPISettings(SPI_CLOCK_DIV4, MSBFIRST, SPI_MODE0);
@@ -233,9 +233,9 @@ void DavisRFM69::interruptHandler() {
   {
     setMode(RF69_MODE_STANDBY);
     select();   // Select RFM69 module, disabling interrupts
-    SPI.transfer(REG_FIFO & 0x7f);
+    _spi->transfer(REG_FIFO & 0x7f);
 
-    for (uint8_t i = 0; i < DAVIS_PACKET_LEN; i++) DATA[i] = reverseBits(SPI.transfer(0));
+    for (uint8_t i = 0; i < DAVIS_PACKET_LEN; i++) DATA[i] = reverseBits(_spi->transfer(0));
 
     _packetReceived = true;
     unselect();  // Unselect RFM69 module, enabling interrupts
@@ -270,13 +270,13 @@ void DavisRFM69::sendFrame(const void* buffer, uint8_t bufferSize)
   uint16_t crc = crc16_ccitt((volatile uint8_t *)buffer, 6);
   //write to FIFO
   select();
-  SPI.transfer(REG_FIFO | 0x80);
+  _spi->transfer(REG_FIFO | 0x80);
 
   for (uint8_t i = 0; i < bufferSize; i++)
-    SPI.transfer(reverseBits(((uint8_t*)buffer)[i]));
+    _spi->transfer(reverseBits(((uint8_t*)buffer)[i]));
 
-  SPI.transfer(reverseBits(crc >> 8));
-  SPI.transfer(reverseBits(crc & 0xff));
+  _spi->transfer(reverseBits(crc >> 8));
+  _spi->transfer(reverseBits(crc & 0xff));
   unselect();
 
   // no need to wait for transmit mode to be ready since its handled by the radio
@@ -405,8 +405,8 @@ int16_t DavisRFM69::readRSSI(bool forceTrigger) {
 uint8_t DavisRFM69::readReg(uint8_t addr)
 {
   select();
-  SPI.transfer(addr & 0x7F);
-  uint8_t regval = SPI.transfer(0);
+  _spi->transfer(addr & 0x7F);
+  uint8_t regval = _spi->transfer(0);
   unselect();
   return regval;
 }
@@ -414,8 +414,8 @@ uint8_t DavisRFM69::readReg(uint8_t addr)
 void DavisRFM69::writeReg(uint8_t addr, uint8_t value)
 {
   select();
-  SPI.transfer(addr | 0x80);
-  SPI.transfer(value);
+  _spi->transfer(addr | 0x80);
+  _spi->transfer(value);
   unselect();
 }
 
@@ -429,17 +429,17 @@ void DavisRFM69::select(){
 #endif
 
 #ifdef SPI_HAS_TRANSACTION
-  SPI.beginTransaction(_settings);
+  _spi->beginTransaction(_settings);
 #else
   // set RFM69 SPI settings explicitly
-  SPI.setDataMode(SPI_MODE0);
-  SPI.setBitOrder(MSBFIRST);
+  _spi->setDataMode(SPI_MODE0);
+  _spi->setBitOrder(MSBFIRST);
   #if defined(__STM32F1__)
-    SPI.setClockDivider(SPI_CLOCK_DIV8);
+    _spi->setClockDivider(SPI_CLOCK_DIV8);
   #elif defined(__arm__)
-    SPI.setClockDivider(SPI_CLOCK_DIV16);
+    _spi->setClockDivider(SPI_CLOCK_DIV16);
   #else
-    SPI.setClockDivider(SPI_CLOCK_DIV2);
+    _spi->setClockDivider(SPI_CLOCK_DIV2);
   #endif
 #endif
   digitalWrite(_slaveSelectPin, LOW);
@@ -449,7 +449,7 @@ void DavisRFM69::select(){
 void DavisRFM69::unselect() {
   digitalWrite(_slaveSelectPin, HIGH);
 #ifdef SPI_HAS_TRANSACTION
-  SPI.endTransaction();
+  _spi->endTransaction();
 #endif
   // restore SPI settings to what they were before talking to RFM69
 #if defined (SPCR) && defined (SPSR)
@@ -486,8 +486,8 @@ void DavisRFM69::readAllRegs()
   for (uint8_t regAddr = 1; regAddr <= 0x4F; regAddr++)
   {
     select();
-    SPI.transfer(regAddr & 0x7f); // Send address + r/w bit
-    regVal = SPI.transfer(0);
+    _spi->transfer(regAddr & 0x7f); // Send address + r/w bit
+    regVal = _spi->transfer(0);
     unselect();
 
     Serial.print(regAddr, HEX);

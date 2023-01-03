@@ -90,8 +90,9 @@ public:
   static volatile uint8_t CHANNEL;
   static volatile int16_t RSSI;
 
-  DavisRFM69(uint8_t slaveSelectPin = RF69_SPI_CS, uint8_t interruptPin = RF69_IRQ_PIN, bool isRFM69HW = false, uint8_t interruptNum = RF69_IRQ_NUM)
+  DavisRFM69(SPIClass *spi, uint8_t slaveSelectPin = RF69_SPI_CS, uint8_t interruptPin = RF69_IRQ_PIN, bool isRFM69HW = false, uint8_t interruptNum = RF69_IRQ_NUM)
   {
+    _spi = spi;
     _slaveSelectPin = slaveSelectPin;
     _interruptPin = interruptPin;
     _interruptNum = interruptNum;
@@ -126,6 +127,7 @@ public:
   void readAllRegs();
 
 protected:
+  SPIClass *_spi;
   void virtual interruptHandler();
   void sendFrame(const void *buffer, uint8_t size);
   uint8_t reverseBits(uint8_t b);
