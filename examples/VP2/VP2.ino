@@ -13,11 +13,11 @@
 
 /* ESP32 pinout */
 
-// MISO  GPIO_NUM_12
-// MOSI  GPIO_NUM_13
-// SCLK  GPIO_NUM_14
-#define RF69_NSS  10  //GPIO_NUM_15
-#define RF69_IRQ  2    //GPIO_NUM_2
+// MISO  GPIO_NUM_19
+// MOSI  GPIO_NUM_23
+// SCLK  GPIO_NUM_18
+#define RF69_NSS  5     //GPIO_NUM_5
+#define RF69_IRQ  2     //GPIO_NUM_2
 
 DavisRFM69 radio(RF69_NSS, RF69_IRQ, IS_RFM69HW);
 
