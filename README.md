@@ -11,7 +11,9 @@ The drawback of the CC1110 is that it has its own embedded microcontroller [that
 
 The one potential bright spot in the CC11xx story is the [RFBee](http://www.seeedstudio.com/depot/rfbee-v11-wireless-arduino-compatible-node-p-614.html).  It couples a TI CC1101 with an Arduino and is easy to use and program, but it is based on an Atmega 168 whose limited RAM and FLASH have hampered efforts to implement a full blown emulation of the Davis indoor console.
 
-The new kid on the block is the RFM69 module from HopeRF.  This module is inexpensive and can be bought either standalone or integrated on a ["Moteino"](http://lowpowerlab.com/blog/category/moteino/) Atmega 328 Arduino clone from LowPowerLabs.  This library demonstrates that the RFM69 is flexible enough to receive transmissions from the TI transmitter chip in the ISS.
+The new kid on the block is the **RFM69 module from HopeRF**.  
+
+This module is inexpensive and can be bought either standalone or integrated on a ["Moteino"](http://lowpowerlab.com/blog/category/moteino/) Atmega 328 Arduino clone from LowPowerLabs.  This library demonstrates that the RFM69 is flexible enough to receive transmissions from the TI transmitter chip in the ISS.
 
 ## Features
 This library sniffs the wireless packets transmitted from a Davis ISS.  
